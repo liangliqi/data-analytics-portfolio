@@ -1,0 +1,244 @@
+---
+title: "Determinants of Life Satisfaction in Early Adulthood: Health, Employment, Education, and Parental Involvement"
+author: "Liqi Liang"
+date: "2024"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Overview
+
+This analysis examines factors associated with life satisfaction among young adults at age 22, using data from the ICPSR Transition to Adulthood Supplement (TAS), Waves 1–5, 2005–2011 (ICPSR 31622). The central question is whether employment status moderates the relationship between health and life satisfaction, while also accounting for education, parental involvement, gender, and race.
+
+The analysis proceeds in three stages: a baseline OLS model, a corrected model with outlier removal and variable transformations, and an interaction model testing whether the effect of health on life satisfaction differs by employment status.
+
+---
+
+```{r load-libraries, message=FALSE, warning=FALSE}
+rm(list = ls(all.names = TRUE))
+library(knitr)
+library(stargazer)
+library(ggplot2)
+```
+
+---
+
+## Data Preparation
+
+### Load and Subset
+
+```{r load-data}
+load("df.rda")
+df <- da31622.0012
+
+subdata <- df[, c(
+  "K7I1",   # Life satisfaction
+  "K7G1",   # CPS involvement
+  "K7H1_1", # Race: White
+  "K7H1_2", # Race: Black or African American
+  "K7H1_3", # Race: Asian or Pacific Islander
+  "K7H1_4", # Race: Native American or Alaskan Native
+  "K7H1_5", # Race: Other
+  "K7H5",   # Gender
+  "K7C1",   # Work last week
+  "K7E1",   # Involvement of biological mother
+  "K7E7",   # Involvement of biological father
+  "K7I2",   # Health
+  "K7B1"    # Education
+)]
+
+colnames(subdata) <- c(
+  "life_satisfaction", "cps_involvement",
+  "race_white", "race_black", "race_asian", "race_native", "race_other",
+  "gender", "work_last_week",
+  "mother_involvement", "father_involvement",
+  "health", "education"
+)
+```
+
+### Recode Variables
+
+Survey responses are stored as labeled strings; the following recodes them to numeric values. Life satisfaction is reverse-coded so that higher values indicate greater satisfaction. Health is reverse-coded so that higher values indicate better health.
+
+```{r recode}
+# Remove "not in wave" observations
+subdata <- subdata[!apply(subdata, 1, function(row) any(grepl("\\(-9\\) -9 Not in wave", row))), ]
+
+subdata$life_satisfaction <- sapply(subdata$life_satisfaction, function(v) {
+  if (grepl("\\(1\\)", v)) 4 else if (grepl("\\(2\\)", v)) 3 else if (grepl("\\(3\\)", v)) 2 else if (grepl("\\(4\\)", v)) 1 else NA
+})
+
+subdata$cps_involvement <- sapply(subdata$cps_involvement, function(v) {
+  if (grepl("\\(1\\)", v)) 1 else if (grepl("\\(2\\)", v)) 0 else NA
+})
+
+for (race_var in c("race_white", "race_black", "race_asian", "race_native", "race_other")) {
+  subdata[[race_var]] <- sapply(subdata[[race_var]], function(v) {
+    if (grepl("\\(1\\)", v)) 1 else if (grepl("\\(0\\)", v)) 0 else NA
+  })
+}
+
+subdata$gender <- sapply(subdata$gender, function(v) {
+  if (grepl("\\(001\\)", v)) 1 else if (grepl("\\(002\\)", v)) 2 else NA
+})
+
+subdata$work_last_week <- sapply(subdata$work_last_week, function(v) {
+  if (grepl("\\(1\\)", v)) 1 else if (grepl("\\(2\\)", v)) 0 else NA
+})
+
+for (par_var in c("mother_involvement", "father_involvement")) {
+  subdata[[par_var]] <- sapply(subdata[[par_var]], function(v) {
+    if (grepl("\\(1\\)", v)) 4 else if (grepl("\\(2\\)", v)) 3 else if (grepl("\\(3\\)", v)) 2 else if (grepl("\\(4\\)", v)) 1 else NA
+  })
+}
+
+subdata$health <- sapply(subdata$health, function(v) {
+  if (grepl("\\(1\\)", v)) 5 else if (grepl("\\(2\\)", v)) 4 else if (grepl("\\(3\\)", v)) 3 else if (grepl("\\(4\\)", v)) 2 else if (grepl("\\(5\\)", v)) 1 else NA
+})
+
+subdata$education <- sapply(subdata$education, function(v) {
+  if (grepl("\\((101|102|103)\\)", v)) NA
+  else if (grepl("\\((\\d{1,3})\\)", v)) as.numeric(gsub(".*\\((\\d{1,3})\\).*", "\\1", v))
+  else NA
+})
+
+summary(subdata)
+```
+
+### Clean and Derive Variables
+
+```{r clean}
+dfclean <- na.omit(subdata)
+dfclean$race_color <- ifelse(dfclean$race_white == 1, 0, 1)  # 0 = White, 1 = non-White
+nrow(dfclean)
+summary(dfclean)
+sapply(dfclean, sd, na.rm = TRUE)
+```
+
+### Correlation Matrix
+
+```{r correlation}
+round(cor(dfclean), 4)
+```
+
+---
+
+## Model 1: Base Model
+
+```{r base-model}
+model_linear <- lm(as.numeric(life_satisfaction) ~ health + work_last_week + gender +
+                     race_color + education + mother_involvement + father_involvement,
+                   data = dfclean)
+```
+
+```{r base-model-table, results='asis'}
+stargazer::stargazer(model_linear, type = "html",
+                     title = "Base OLS Model: Predictors of Life Satisfaction")
+```
+
+---
+
+## Assumption Diagnostics
+
+**Linearity** — LOESS curves vs. linear fit for the two key continuous predictors:
+
+```{r linearity}
+ggplot(dfclean, aes(x = health, y = as.numeric(life_satisfaction))) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(method = "loess", se = TRUE, color = "blue") +
+  geom_smooth(method = "lm", color = "red") +
+  labs(title = "Linearity Check: Health vs Life Satisfaction")
+
+ggplot(dfclean, aes(x = education, y = as.numeric(life_satisfaction))) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(method = "loess", se = TRUE, color = "blue") +
+  geom_smooth(method = "lm", color = "red") +
+  labs(title = "Linearity Check: Education vs Life Satisfaction")
+```
+
+**Normality of Residuals:**
+
+```{r normality}
+hist(residuals(model_linear), main = "Histogram of Residuals",
+     xlab = "Residuals", col = "lightblue", breaks = 20)
+qqnorm(residuals(model_linear))
+qqline(residuals(model_linear), col = "red")
+```
+
+**Outlier Removal** — observations with absolute residuals > 2 removed:
+
+```{r outliers}
+residuals_abs <- abs(residuals(model_linear))
+outliers <- which(residuals_abs > 2)
+df_cleaned <- dfclean[-outliers, ]
+cat("Original n:", nrow(dfclean), "\nCleaned n:", nrow(df_cleaned))
+```
+
+---
+
+## Model 2: Corrected Model
+
+Health and education are mean-centered; parental involvement variables are log-transformed (log(x+1)) to reduce skew.
+
+```{r transformations}
+df_cleaned$health_centered     <- scale(df_cleaned$health,     center = TRUE, scale = FALSE)
+df_cleaned$education_centered  <- scale(df_cleaned$education,  center = TRUE, scale = FALSE)
+df_cleaned$mother_involvement_log <- log(df_cleaned$mother_involvement + 1)
+df_cleaned$father_involvement_log <- log(df_cleaned$father_involvement + 1)
+```
+
+Sequential model building, adding one variable group at a time:
+
+```{r corrected-models}
+model1 <- lm(as.numeric(life_satisfaction) ~ health_centered, data = df_cleaned)
+model2 <- lm(as.numeric(life_satisfaction) ~ health_centered + work_last_week, data = df_cleaned)
+model3 <- lm(as.numeric(life_satisfaction) ~ health_centered + work_last_week + gender, data = df_cleaned)
+model4 <- lm(as.numeric(life_satisfaction) ~ health_centered + work_last_week + gender + race_color, data = df_cleaned)
+model5 <- lm(as.numeric(life_satisfaction) ~ health_centered + work_last_week + gender + race_color + education_centered, data = df_cleaned)
+model_corrected <- lm(as.numeric(life_satisfaction) ~ health_centered + work_last_week + gender +
+                        race_color + education_centered +
+                        mother_involvement_log + father_involvement_log, data = df_cleaned)
+```
+
+```{r corrected-table, results='asis'}
+stargazer::stargazer(model1, model2, model3, model4, model5, model_corrected,
+                     type = "html",
+                     title = "Sequential Model Building: Corrected Base Models",
+                     column.labels = c("Health only", "+ Work", "+ Gender", "+ Race", "+ Education", "+ Parents"))
+```
+
+**AIC comparison across all models:**
+
+```{r aic}
+data.frame(
+  Model = c("Base (uncorrected)", "M1", "M2", "M3", "M4", "M5", "Corrected"),
+  AIC = c(AIC(model_linear), AIC(model1), AIC(model2), AIC(model3),
+          AIC(model4), AIC(model5), AIC(model_corrected))
+)
+```
+
+---
+
+## Model 3: Interaction of Health and Employment Status
+
+Tests whether the effect of health on life satisfaction is moderated by employment status.
+
+```{r interaction-model}
+model_interaction <- lm(as.numeric(life_satisfaction) ~ health_centered + work_last_week +
+                          gender + race_color + education_centered +
+                          mother_involvement_log + father_involvement_log +
+                          health_centered:work_last_week,
+                        data = df_cleaned)
+
+cat("Interaction model AIC:", AIC(model_interaction))
+```
+
+```{r interaction-table, results='asis'}
+stargazer::stargazer(model_corrected, model_interaction,
+                     type = "html",
+                     title = "Corrected Base Model vs. Interaction Model",
+                     column.labels = c("Corrected Base", "With Interaction"))
+```
