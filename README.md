@@ -1,6 +1,6 @@
 # Data Analytics Portfolio
 
-**Liqi Liang** · M.S. Social Policy & Data Analytics, University of Pennsylvania (2026) · [lianglq@sas.upenn.edu](mailto:lianglq@sas.upenn.edu) [liangrosetta@gmail.com](liangrosetta@gmail.com)
+**Liqi Liang** · M.S. Social Policy & Data Analytics, University of Pennsylvania (2026) · [lianglq@sas.upenn.edu](mailto:lianglq@sas.upenn.edu) [liangrosetta@gmail.com](mailto:liangrosetta@gmail.com)
 
 I work at the intersection of data analysis and social policy — using quantitative methods to understand how programs, environments, and institutions shape outcomes for people. My background combines hands-on policy fieldwork (program evaluation at Penn's Netter Center, nonprofit due diligence) with technical training in machine learning, causal inference, and spatial analysis. Before Penn, I worked in business analytics at JD.com, investment research at ICBC Credit Suisse, and audit at Deloitte.
 
