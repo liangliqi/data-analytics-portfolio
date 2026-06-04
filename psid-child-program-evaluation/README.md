@@ -71,7 +71,8 @@ Each interaction model compared to the base via ANOVA. A full model includes all
 
 | File | Description |
 |---|---|
-| `psid_child_development_regression.Rmd` | Full analysis — all three parts |
+| `psid_child_development_regression.Rmd` | Full analysis — all three parts (source) |
+| `psid_child_development_regression.html` | Rendered output with all results and plots |
 | `good.csv` | PSID-CDS analysis dataset |
 
 ---
