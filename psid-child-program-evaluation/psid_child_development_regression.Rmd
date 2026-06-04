@@ -1,0 +1,290 @@
+---
+title: "Early Childhood Program Evaluation: A Regression Analysis of WIC and AFDC Effects on Child Academic Achievement"
+author: "Liqi Liang"
+date: "2024"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Overview
+
+This project uses data from the Child Development Supplement of the Panel Study of Income Dynamics (PSID-CDS) to evaluate how participation in federally funded early childhood programs — specifically WIC (Women, Infants, and Children Nutrition Program) and AFDC (Aid to Families with Dependent Children) — relates to children's academic achievement. The analysis proceeds in three stages:
+
+- **Part 1:** Multiple regression examining the individual and joint effects of WIC and AFDC participation on children's reading achievement
+- **Part 2:** Regression assumption diagnostics (linearity, homoscedasticity, normality) and outlier corrections, applied to a model predicting math achievement
+- **Part 3:** Interaction effects — testing whether the effect of WIC participation on math achievement is moderated by family income, race, and child age
+
+All analyses control for child age, family income, birth weight status, and home environment quality (HOME97).
+
+---
+
+```{r load-libraries, message=FALSE, warning=FALSE}
+rm(list = ls(all.names = TRUE))
+library(stargazer)
+library(knitr)
+```
+
+---
+
+## Part 1: WIC and AFDC Effects on Reading Achievement
+
+### Data Preparation
+
+```{r part1-data}
+data1 <- read.csv("good.csv")
+subset_good <- c("readss97", "WICpreg", "AFDCpreg", "AGE97", "faminc97", "bthwht", "HOME97")
+good <- data1[, subset_good]
+good <- na.omit(good)
+nrow(good)
+```
+
+### Descriptive Statistics
+
+```{r part1-descriptives}
+summary(good)
+sapply(good, function(x) round(sd(x), 2))
+```
+
+### Correlation Matrix
+
+```{r part1-correlation}
+round(cor(good), 4)
+```
+
+### Regression Models
+
+Three nested OLS models are estimated:
+
+- **Model 1a:** WIC participation only (plus controls)
+- **Model 1b:** AFDC participation only (plus controls)
+- **Model 1c:** Both WIC and AFDC together (plus controls)
+
+```{r part1-models}
+model1_WIC <- lm(readss97 ~ WICpreg + AGE97 + faminc97 + bthwht + HOME97, data = good)
+summary(model1_WIC)
+
+model2_AFDC <- lm(readss97 ~ AFDCpreg + AGE97 + faminc97 + bthwht + HOME97, data = good)
+summary(model2_AFDC)
+
+model3_both <- lm(readss97 ~ WICpreg + AFDCpreg + AGE97 + faminc97 + bthwht + HOME97, data = good)
+summary(model3_both)
+```
+
+```{r part1-table, results='asis'}
+stargazer::stargazer(model1_WIC, model2_AFDC, model3_both, type = "html",
+                     title = "OLS Regression: Effects of WIC and AFDC on Reading Achievement")
+```
+
+### Partial F-Tests: Unique Contributions
+
+```{r part1-anova}
+# Does adding WIC improve fit beyond AFDC alone?
+anova(model1_WIC, model3_both)
+# Does adding AFDC improve fit beyond WIC alone?
+anova(model2_AFDC, model3_both)
+```
+
+---
+
+## Part 2: Assumption Diagnostics and Outlier Corrections
+
+This section evaluates whether the OLS assumptions hold for a model predicting **math achievement** (mathraw97), and applies corrections where violations are found.
+
+### Data Preparation
+
+Family income is log-transformed to address right skew (negative incomes set to NA).
+
+```{r part2-data}
+data1 <- read.csv("good.csv")
+data1$loginc97 <- ifelse(data1$faminc97 > 0, log(data1$faminc97), NA)
+subset_good <- c("mathraw97", "AGE97", "loginc97", "bthwht", "WICpreg", "HOME97")
+good <- data1[, subset_good]
+good <- na.omit(good)
+nrow(good)
+```
+
+```{r part2-descriptives}
+summary(good)
+sapply(good, function(x) round(sd(x), 2))
+round(cor(good), 4)
+```
+
+### Base Model
+
+```{r part2-model1}
+model1 <- lm(mathraw97 ~ AGE97 + loginc97 + bthwht + WICpreg, data = good)
+summary(model1)
+```
+
+### Assumption Diagnostics
+
+**Linearity** — Scatterplots of mathraw97 against each predictor:
+
+```{r part2-linearity}
+par(mfrow = c(2, 2))
+plot(good$AGE97, good$mathraw97, main = "Mathraw97 vs AGE97")
+abline(lm(mathraw97 ~ AGE97, data = good), col = "skyblue")
+plot(good$loginc97, good$mathraw97, main = "Mathraw97 vs loginc97")
+abline(lm(mathraw97 ~ loginc97, data = good), col = "skyblue")
+plot(good$bthwht, good$mathraw97, main = "Mathraw97 vs bthwht")
+abline(lm(mathraw97 ~ bthwht, data = good), col = "skyblue")
+plot(good$WICpreg, good$mathraw97, main = "Mathraw97 vs WICpreg")
+abline(lm(mathraw97 ~ WICpreg, data = good), col = "skyblue")
+```
+
+**Homoscedasticity** — Residuals vs. fitted values:
+
+```{r part2-homoscedasticity}
+plot(model1$fitted.values, model1$residuals, main = "Residuals vs Fitted")
+abline(h = 0, col = "deeppink")
+lines(lowess(model1$fitted.values, model1$residuals), col = "blue")
+```
+
+**Normality of Residuals:**
+
+```{r part2-normality}
+par(mfrow = c(1, 2))
+hist(model1$residuals, breaks = 20, main = "Histogram of Residuals")
+qqnorm(model1$residuals)
+qqline(model1$residuals, col = "blue")
+```
+
+### Outlier Diagnostics
+
+**Studentized Residuals** (threshold: ±3):
+
+```{r part2-outliers-residuals}
+good$index <- 1:nrow(good)
+good$rstudent <- rstudent(model1)
+
+plot(good$rstudent, xlab = "Index", ylab = "Studentized residuals", pch = 20)
+abline(h = 0, col = "deeppink")
+abline(h = c(2, -2), col = "blue")
+abline(h = c(3, -3), col = "lightgreen")
+
+outliers_residuals <- subset(good, abs(good$rstudent) > 3)
+print(outliers_residuals$index)
+```
+
+**Leverage Values** (threshold: 0.03):
+
+```{r part2-outliers-leverage}
+cutoff_leverage <- (2 * (ncol(good) - 1)) / nrow(good)
+good$leverage <- hatvalues(model1)
+
+plot(good$leverage, xlab = "Index", ylab = "Leverage", pch = 19)
+abline(h = cutoff_leverage, col = "green")
+abline(h = 0.03, col = "deeppink")
+
+outliers_leverage <- subset(good, good$leverage > 0.03)
+print(outliers_leverage$index)
+```
+
+**Cook's Distance** (threshold: 4/n):
+
+```{r part2-outliers-cooks}
+cutoff_cooksd <- 4 / nrow(good)
+good$cooksd <- cooks.distance(model1)
+
+influential_points <- subset(good, good$cooksd > cutoff_cooksd)
+print(influential_points$index)
+
+hist(good$cooksd[good$cooksd > cutoff_cooksd],
+     main = "Cook's Distance for Influential Points",
+     xlab = "Cook's Distance",
+     breaks = 10)
+
+cook_quantiles <- round(quantile(good$cooksd[good$cooksd > cutoff_cooksd], probs = seq(0, 1, 0.05)), 4)
+print(cook_quantiles)
+```
+
+### Corrected Model and HOME97 Inclusion
+
+Observations flagged by any of the three outlier criteria are removed. A third model adds HOME97 (home environment quality) to assess its incremental contribution.
+
+```{r part2-corrections}
+good_clean <- good[!(good$index %in% c(outliers_residuals$index,
+                                        outliers_leverage$index,
+                                        influential_points$index)), ]
+nrow(good_clean)
+
+model2_corrected <- lm(mathraw97 ~ AGE97 + loginc97 + bthwht + WICpreg, data = good_clean)
+summary(model2_corrected)
+
+model3 <- lm(mathraw97 ~ AGE97 + loginc97 + bthwht + WICpreg + HOME97, data = good_clean)
+```
+
+```{r part2-table, results='asis'}
+stargazer::stargazer(model1, model2_corrected, model3, type = "html",
+                     title = "OLS Regression: Math Achievement — Base, Corrected, and Extended Models",
+                     column.labels = c("Base", "Outliers Removed", "+ HOME97"))
+```
+
+---
+
+## Part 3: Interaction Effects
+
+This section tests whether the effect of WIC participation on math achievement is moderated by family income, race, and child age.
+
+### Data Preparation
+
+Race is recoded as a binary variable (0 = White, 1 = non-White; observations with CHRACE = 9 excluded as missing).
+
+```{r part3-data}
+data1 <- read.csv("good.csv")
+data1$loginc97 <- ifelse(data1$faminc97 > 0, log(data1$faminc97), NA)
+subset_good <- c("WICpreg", "CHRACE", "mathraw97", "AGE97", "loginc97", "bthwht", "HOME97")
+good <- data1[, subset_good]
+good$RACE <- ifelse(good$CHRACE == 9, NA,
+             ifelse(good$CHRACE == 1, 0,
+             ifelse(good$CHRACE == 2, 1, NA)))
+good <- na.omit(good)
+nrow(good)
+```
+
+```{r part3-descriptives}
+summary(good)
+sapply(good, function(x) round(sd(x), 2))
+round(cor(good), 4)
+```
+
+### Models
+
+```{r part3-models}
+# Base model (no interactions)
+model_base <- lm(mathraw97 ~ loginc97 + RACE + AGE97 + WICpreg + bthwht + HOME97, data = good)
+
+# Interaction models
+model_1 <- lm(mathraw97 ~ loginc97 + RACE + AGE97 + WICpreg + bthwht + HOME97 + WICpreg:loginc97, data = good)
+model_2 <- lm(mathraw97 ~ loginc97 + RACE + AGE97 + WICpreg + bthwht + HOME97 + WICpreg:RACE, data = good)
+model_3 <- lm(mathraw97 ~ loginc97 + RACE + AGE97 + WICpreg + bthwht + HOME97 + WICpreg:AGE97, data = good)
+
+# Full model with all three interaction terms
+model_full <- lm(mathraw97 ~ loginc97 + RACE + AGE97 + WICpreg + bthwht + HOME97 +
+                   WICpreg:loginc97 + WICpreg:RACE + WICpreg:AGE97, data = good)
+```
+
+### ANOVA Model Comparisons
+
+```{r part3-anova}
+aov_loginc97 <- anova(model_base, model_1)
+aov_RACE     <- anova(model_base, model_2)
+aov_AGE97    <- anova(model_base, model_3)
+
+print("ANOVA: WICpreg × loginc97")
+print(aov_loginc97)
+print("ANOVA: WICpreg × RACE")
+print(aov_RACE)
+print("ANOVA: WICpreg × AGE97")
+print(aov_AGE97)
+```
+
+```{r part3-table, results='asis'}
+stargazer::stargazer(model_base, model_1, model_2, model_3, model_full,
+                     type = "html",
+                     title = "Regression Models with Interaction Effects",
+                     column.labels = c("Base", "× Income", "× Race", "× Age", "Full"))
+```
