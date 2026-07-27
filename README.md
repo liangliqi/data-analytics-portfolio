@@ -55,5 +55,3 @@ Eight spatial analysis projects covering poverty and crime patterns, park access
 ## Background
 
 My policy work informs how I approach data problems — I've conducted field research and stakeholder interviews for K-12 health program evaluation at Penn's Netter Center, co-authored a grant proposal that secured $15,000 for a Philadelphia nonprofit, and done industry analysis at JD.com (European e-commerce) and ICBC Credit Suisse (investment research). I bring that applied context to how I frame analytical questions and communicate results.
-
-Open to data analyst, policy analyst, and research analyst roles. STEM OPT eligible (3-year).
